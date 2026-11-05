@@ -1,0 +1,144 @@
+# Entra ID Conditional Access & Sign-In RCA (`entra-signin-rca`)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python: 3.9+](https://img.shields.io/badge/Python-3.9+-brightgreen.svg)](https://www.python.org/)
+[![Standard: agentskills.io](https://img.shields.io/badge/Standard-agentskills.io-purple.svg)](https://agentskills.io)
+[![Tests: Passing](https://img.shields.io/badge/Tests-Passing-success.svg)](tests/validate-skill.py)
+
+An autonomous AI Agent Skill and zero-dependency diagnostic toolkit for Microsoft 365 and IAM administrators. Evaluates exported Microsoft Entra ID (Azure AD) Sign-In JSON logs and live Microsoft Graph telemetry to determine why a user was blocked, prompted for unexpected MFA, or caught in Conditional Access loops.
+
+![Entra Sign-In RCA Terminal Demo](assets/demo.gif)
+
+---
+
+## The Operational Problem
+
+Conditional Access (CA) is the policy engine of Zero Trust in Microsoft 365. However, troubleshooting access failures remains one of the largest friction points for identity and helpdesk teams:
+
+1. **The Native "What If" Tool is Static:** The native Entra "What If" tool evaluates hypothetical policies against static tenant attributes. It cannot evaluate dynamic runtime telemetry—such as dual-stack IPv6 carrier transitions, missing Primary Refresh Token (PRT) claims in third-party browsers, or Continuous Access Evaluation (CAE) token drops.
+2. **Dense, Verbose JSON Logs:** Exported sign-in logs contain hundreds of lines per authentication event, obscuring the single failing condition among dozens of satisfied policies.
+3. **Overlapping Policy Intersections:** An explicit `Block` control in any matching policy overrides all `Grant` controls, while matching `Grant` controls across multiple policies must be satisfied concurrently (`AND` logic across policies).
+
+`entra-signin-rca` solves this by pairing a deterministic, zero-dependency local telemetry parser with an AI agent diagnostic rulebook.
+
+---
+
+## Core Anomaly Detections
+
+The bundled parser (`scripts/parse-entra-signin.py`) automatically flags the top 5 real-world identity failure modes:
+
+| Diagnostic Code | Failure Pattern | Technical Root Cause |
+| --- | --- | --- |
+| `MISSING_PRT_OR_SSO_EXTENSION` | Chrome / Firefox Unregistered Device Illusion | Device is compliant in Intune, but user signed in via Chrome or Firefox without the Windows Accounts extension (or in Incognito). Device ID is blank, failing `compliantDevice` grant controls. |
+| `IPV6_NAMED_LOCATION_MISMATCH` | Dual-Stack Carrier Routing Block | Corporate Named Location defines only IPv4 CIDRs (`198.51.100.0/24`). ISP routes client traffic over IPv6, causing Entra to evaluate the connection as "Untrusted / Outside Corporate Network". |
+| `AUTHENTICATION_STRENGTH_MISMATCH` | Phishing-Resistant MFA Requirement (`530034`) | Policy requires FIDO2 / Windows Hello for Business / Passkey, but user only enrolled SMS or Microsoft Authenticator Push. |
+| `DEVICE_COMPLIANCE_DRIFT` | Registered Endpoint Out of Compliance | Device ID is present, but `isCompliant` evaluates to `false` due to BitLocker encryption failure, overdue Intune check-in, or OS version requirements. |
+| `LEGACY_AUTHENTICATION_PROTOCOL` | Basic Auth Protocol Block | Client connects via Exchange ActiveSync, IMAP4, or POP3, which cannot satisfy interactive MFA or device compliance checks. |
+
+---
+
+## Quick Start
+
+### Method 1: Direct Microsoft Graph One-Liner (Fastest)
+
+Query the affected user's most recent failed sign-in and pipe directly to the local parser without saving credentials or raw files:
+
+```powershell
+Connect-MgGraph -Scopes "AuditLog.Read.All" -NoWelcome
+Get-MgAuditLogSignIn -Filter "userPrincipalName eq 'user@contoso.com' and status/errorCode ne 0" -Top 1 |
+    ConvertTo-Json -Depth 6 |
+    python scripts/parse-entra-signin.py -i - --sanitize --format markdown
+```
+
+### Method 2: Local File Parsing
+
+Export sign-in logs from **Microsoft Entra Admin Center -> Identity -> Monitoring & health -> Sign-in logs -> Download JSON**, then run:
+
+```bash
+# Generate compact sanitized markdown summary
+python scripts/parse-entra-signin.py --input SignIns.json --sanitize --format markdown
+
+# Generate structured JSON for automation pipelines
+python scripts/parse-entra-signin.py --input SignIns.json --sanitize --format json --output triage.json
+```
+
+### Method 3: AI Agent Integration (`agentskills.io`)
+
+Instruct your AI coding assistant or operations agent:
+
+```text
+Analyze this Entra sign-in failure using the entra-signin-rca skill:
+1. Parse the attached SignIns.json log using scripts/parse-entra-signin.py --sanitize.
+2. Cross-reference the failing policy with references/entra-error-codes-and-ca-controls.md.
+3. Recommend two remediation paths:
+   - Endpoint/Client-side fix (zero policy changes).
+   - Safe policy architecture fix (with break-glass exclusions and report-only validation).
+4. Output the result in assets/ca-lockout-rca-report-template.md format.
+```
+
+---
+
+## Repository Structure
+
+```text
+entra-signin-rca/
+├── SKILL.md                                 # Canonical agent skill definition (agentskills.io)
+├── README.md                                # Project overview, quickstart, and documentation
+├── LICENSE                                  # MIT License
+├── scripts/
+│   └── parse-entra-signin.py                # Zero-dependency Entra sign-in JSON parser
+├── references/
+│   └── entra-error-codes-and-ca-controls.md # Comprehensive AADSTS error and CA control matrix
+├── assets/
+│   ├── demo.gif                             # Animated terminal walkthrough
+│   ├── demo.mp4                             # High-definition MP4 recording
+│   └── ca-lockout-rca-report-template.md    # Standard IAM Root Cause Analysis report template
+└── tests/
+    ├── validate-skill.py                    # Automated test suite (7 suites)
+    └── fixtures/
+        ├── fixture-ca-device-not-compliant.json
+        ├── fixture-ca-ipv6-named-location-block.json
+        ├── fixture-ca-auth-strength-mismatch.json
+        └── fixture-ca-legacy-auth-block.json
+```
+
+---
+
+## Automated Verification
+
+This skill includes an automated test harness validating parser accuracy, anomaly detection heuristics, and PII sanitization across all synthetic fixtures:
+
+```bash
+python tests/validate-skill.py
+```
+
+Expected output:
+```text
+============================================================
+Running Automated Test Suite for entra-signin-rca
+============================================================
+[PASS] Fixture 1: Device Compliance & Missing PRT in Browser verified.
+[PASS] Fixture 2: IPv6 Named Location Mismatch verified.
+[PASS] Fixture 3: Authentication Strength Mismatch verified.
+[PASS] Fixture 4: Legacy Authentication Protocol Block verified.
+[PASS] Sanitization Integrity: PII and telemetry identifiers fully masked.
+[PASS] Markdown Output: Structured report generated cleanly.
+[PASS] Stdin Pipeline: Piped data stream parsed successfully.
+============================================================
+ALL TESTS PASSED (7/7 suites successful)
+============================================================
+```
+
+---
+
+## Security & Privacy Guardrails
+
+1. **Zero-Trust Remediation Priority:** The skill always presents endpoint remediation options before recommending policy changes. Disabling security policies or creating permanent broad user exclusions is strictly disallowed.
+2. **Break-Glass Hygiene:** Recommended policy modifications mandate verifying at least two cloud-only Emergency Access (`*.onmicrosoft.com`) accounts are excluded, and testing in **Report-only** mode first.
+3. **PII Sanitization:** The `--sanitize` option performs SHA-256 masking on UserPrincipalNames, obfuscates public IPv4/IPv6 addresses, redacts device display names, and zeros out GUIDs (TenantId, CorrelationId, DeviceId, PolicyId).
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE). Copyright (c) 2026 Boyo Toritseju.

@@ -1,0 +1,55 @@
+{
+  "id": "e4589d12-88fb-4d1a-963d-4c3e80d291b5",
+  "createdDateTime": "2026-11-05T14:22:10Z",
+  "userPrincipalName": "sarah.jenkins@contoso.com",
+  "userId": "9b1deb4d-3b7d-4bcc-9b77-da2a0e545210",
+  "appId": "00000002-0000-0ff1-ce00-000000000000",
+  "appDisplayName": "Office 365 Exchange Online",
+  "ipAddress": "198.51.100.88",
+  "clientAppUsed": "Browser",
+  "correlationId": "f7842e61-9c3a-4422-b5e1-872f28148b99",
+  "conditionalAccessStatus": "failure",
+  "isInteractive": true,
+  "status": {
+    "errorCode": 53003,
+    "failureReason": "Access has been blocked by Conditional Access policies.",
+    "additionalDetails": "The device is required to be marked as compliant, but no device identity was transmitted."
+  },
+  "deviceDetail": {
+    "deviceId": "",
+    "displayName": "",
+    "operatingSystem": "Windows 11",
+    "browser": "Chrome 128.0",
+    "isCompliant": false,
+    "isManaged": false,
+    "trustType": ""
+  },
+  "location": {
+    "city": "Dallas",
+    "state": "Texas",
+    "countryOrRegion": "US"
+  },
+  "appliedConditionalAccessPolicies": [
+    {
+      "id": "4b68ef50-7193-4a18-912b-b60586e9b412",
+      "displayName": "CA001-Require-Compliant-Device-For-Office365",
+      "result": "failure",
+      "enforcedGrantControls": [
+        "compliantDevice"
+      ],
+      "enforcedSessionControls": [],
+      "conditionsSatisfied": "Users, Applications, ClientApps",
+      "conditionsNotSatisfied": "DeviceState"
+    },
+    {
+      "id": "7820ad41-2a10-449e-bdf1-3316cc810f44",
+      "displayName": "CA000-MFA-Baseline-AllUsers",
+      "result": "success",
+      "enforcedGrantControls": [
+        "mfa"
+      ],
+      "enforcedSessionControls": []
+    }
+  ],
+  "authenticationRequirement": "multiFactorAuthentication"
+}

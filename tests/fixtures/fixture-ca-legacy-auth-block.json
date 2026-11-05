@@ -1,0 +1,46 @@
+{
+  "id": "f1122334-5566-7788-99aa-bbccddeeff11",
+  "createdDateTime": "2026-11-05T17:45:12Z",
+  "userPrincipalName": "legacy.scanner@contoso.com",
+  "userId": "55667788-99aa-bbcc-ddee-ff0011223344",
+  "appId": "00000002-0000-0ff1-ce00-000000000000",
+  "appDisplayName": "Office 365 Exchange Online",
+  "ipAddress": "203.0.113.15",
+  "clientAppUsed": "Exchange ActiveSync",
+  "correlationId": "44556677-8899-aabb-ccdd-eeff00112233",
+  "conditionalAccessStatus": "failure",
+  "isInteractive": false,
+  "status": {
+    "errorCode": 53003,
+    "failureReason": "Access has been blocked by Conditional Access policies.",
+    "additionalDetails": "Client application uses legacy authentication protocols that are blocked by policy."
+  },
+  "deviceDetail": {
+    "deviceId": "",
+    "displayName": "",
+    "operatingSystem": "Android",
+    "browser": "",
+    "isCompliant": false,
+    "isManaged": false,
+    "trustType": ""
+  },
+  "location": {
+    "city": "Chicago",
+    "state": "Illinois",
+    "countryOrRegion": "US"
+  },
+  "appliedConditionalAccessPolicies": [
+    {
+      "id": "11223344-5566-7788-99aa-bbccddeeff00",
+      "displayName": "CA004-Block-Legacy-Authentication",
+      "result": "failure",
+      "enforcedGrantControls": [
+        "Block"
+      ],
+      "enforcedSessionControls": [],
+      "conditionsSatisfied": "Users, ClientApps",
+      "conditionsNotSatisfied": "None"
+    }
+  ],
+  "authenticationRequirement": "none"
+}
