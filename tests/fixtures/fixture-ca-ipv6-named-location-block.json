@@ -1,13 +1,13 @@
 {
-  "id": "c7110992-14de-40cb-9861-102941fa9801",
+  "id": "00000000-0000-4000-a000-000000000002",
   "createdDateTime": "2026-11-05T15:05:40Z",
-  "userPrincipalName": "marcus.vance@contoso.com",
-  "userId": "1289deaa-5163-4702-8612-452179bcde71",
+  "userPrincipalName": "mock-user-02-ipv6-location@synthetic-test.local",
+  "userId": "00000000-0000-4000-a000-u000000000002",
   "appId": "c44b4083-3bb0-49c1-b47d-974e53cbdf3c",
   "appDisplayName": "Azure Portal",
   "ipAddress": "2600:1700:4590:1200:d1b2:48f9:8234:5512",
   "clientAppUsed": "Browser",
-  "correlationId": "09ab4412-2114-411a-8809-514782bbccaa",
+  "correlationId": "00000000-0000-4000-a000-c00000000002",
   "conditionalAccessStatus": "failure",
   "isInteractive": true,
   "status": {
@@ -16,8 +16,8 @@
     "additionalDetails": "User attempted to access a restricted corporate application from an untrusted network location."
   },
   "deviceDetail": {
-    "deviceId": "5a4178cc-3120-4ee1-b998-1123456789ab",
-    "displayName": "CONTOSO-LT-099",
+    "deviceId": "00000000-0000-4000-a000-d00000000002",
+    "displayName": "SYNTHETIC-MOCK-LAPTOP-02",
     "operatingSystem": "Windows 11",
     "browser": "Edge 128.0",
     "isCompliant": true,
@@ -31,7 +31,7 @@
   },
   "appliedConditionalAccessPolicies": [
     {
-      "id": "9981240a-f012-4bb1-a201-998877665544",
+      "id": "00000000-0000-4000-a000-p000000000002",
       "displayName": "CA002-Block-Untrusted-Locations-For-Corporate-Apps",
       "result": "failure",
       "enforcedGrantControls": [

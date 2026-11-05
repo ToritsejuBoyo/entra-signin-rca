@@ -1,13 +1,13 @@
 {
-  "id": "e4589d12-88fb-4d1a-963d-4c3e80d291b5",
+  "id": "00000000-0000-4000-a000-000000000001",
   "createdDateTime": "2026-11-05T14:22:10Z",
-  "userPrincipalName": "sarah.jenkins@contoso.com",
-  "userId": "9b1deb4d-3b7d-4bcc-9b77-da2a0e545210",
+  "userPrincipalName": "mock-user-01-device-compliance@synthetic-test.local",
+  "userId": "00000000-0000-4000-a000-u000000000001",
   "appId": "00000002-0000-0ff1-ce00-000000000000",
   "appDisplayName": "Office 365 Exchange Online",
   "ipAddress": "198.51.100.88",
   "clientAppUsed": "Browser",
-  "correlationId": "f7842e61-9c3a-4422-b5e1-872f28148b99",
+  "correlationId": "00000000-0000-4000-a000-c00000000001",
   "conditionalAccessStatus": "failure",
   "isInteractive": true,
   "status": {
@@ -31,7 +31,7 @@
   },
   "appliedConditionalAccessPolicies": [
     {
-      "id": "4b68ef50-7193-4a18-912b-b60586e9b412",
+      "id": "00000000-0000-4000-a000-p000000000001",
       "displayName": "CA001-Require-Compliant-Device-For-Office365",
       "result": "failure",
       "enforcedGrantControls": [
@@ -42,7 +42,7 @@
       "conditionsNotSatisfied": "DeviceState"
     },
     {
-      "id": "7820ad41-2a10-449e-bdf1-3316cc810f44",
+      "id": "00000000-0000-4000-a000-p000000000000",
       "displayName": "CA000-MFA-Baseline-AllUsers",
       "result": "success",
       "enforcedGrantControls": [

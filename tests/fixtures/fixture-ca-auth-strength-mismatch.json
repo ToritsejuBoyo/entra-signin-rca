@@ -1,13 +1,13 @@
 {
-  "id": "a8819022-77cc-44aa-9911-334455667788",
+  "id": "00000000-0000-4000-a000-000000000003",
   "createdDateTime": "2026-11-05T16:12:00Z",
-  "userPrincipalName": "alex.chen@contoso.com",
-  "userId": "33445566-7788-99aa-bbcc-ddeeff001122",
+  "userPrincipalName": "mock-user-03-mfa-strength@synthetic-test.local",
+  "userId": "00000000-0000-4000-a000-u000000000003",
   "appId": "797f4846-ba00-4fd7-ba43-dac1f8f63013",
   "appDisplayName": "Microsoft Azure Management",
   "ipAddress": "198.51.100.42",
   "clientAppUsed": "Browser",
-  "correlationId": "ee223344-5566-7788-99aa-bbccddeeff00",
+  "correlationId": "00000000-0000-4000-a000-c00000000003",
   "conditionalAccessStatus": "failure",
   "isInteractive": true,
   "status": {
@@ -16,8 +16,8 @@
     "additionalDetails": "Policy requires Phishing-Resistant MFA (FIDO2 or Windows Hello for Business), but only standard Authenticator Push was presented."
   },
   "deviceDetail": {
-    "deviceId": "cc445566-7788-9900-aabb-ccddeeff0011",
-    "displayName": "CONTOSO-ADMIN-PC",
+    "deviceId": "00000000-0000-4000-a000-d00000000003",
+    "displayName": "SYNTHETIC-MOCK-ADMIN-PC-03",
     "operatingSystem": "Windows 11",
     "browser": "Edge 128.0",
     "isCompliant": true,
@@ -31,7 +31,7 @@
   },
   "appliedConditionalAccessPolicies": [
     {
-      "id": "bb112233-4455-6677-8899-aabbccddeeff",
+      "id": "00000000-0000-4000-a000-p000000000003",
       "displayName": "CA003-Require-Phishing-Resistant-MFA-For-Privileged-Roles",
       "result": "failure",
       "enforcedGrantControls": [

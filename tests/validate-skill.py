@@ -99,12 +99,12 @@ def test_sanitization_integrity():
     data = json.loads(stdout)
     event = data[0]
     
-    # Check that real UPN, IP, and GUID are masked
-    assert "marcus.vance@contoso.com" not in stdout, "Real UPN leaked into sanitized output"
+    # Check that raw synthetic UPN, IP, and GUID are masked
+    assert "mock-user-02-ipv6-location@synthetic-test.local" not in stdout, "Raw synthetic UPN leaked into sanitized output"
     assert "user-" in event["userPrincipalName"] and "@corp.example.com" in event["userPrincipalName"]
     assert "2600:1700:4590:1200:d1b2:48f9:8234:5512" not in stdout, "Real IPv6 leaked into sanitized output"
     assert "xxxx:xxxx" in event["ipAddress"]
-    assert "5a4178cc-3120-4ee1-b998-1123456789ab" not in stdout, "Real Device ID leaked into sanitized output"
+    assert "00000000-0000-4000-a000-d00000000002" not in stdout, "Raw Device ID leaked into sanitized output"
     assert event["deviceDetail"]["displayName"] == "DEVICE-REDACTED"
     print("[PASS] Sanitization Integrity: PII and telemetry identifiers fully masked.")
 
