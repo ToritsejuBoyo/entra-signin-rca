@@ -55,15 +55,18 @@ def mask_guid(val: Any) -> str:
 def mask_ip(ip: Any) -> str:
     if not ip:
         return ""
-    clean_ip = str(ip).strip().strip("[]")
-    # Strip port if present e.g. 1.2.3.4:443 or [2001:db8::1]:8080
-    if ":" in clean_ip and not clean_ip.startswith("2001:") and not "::" in clean_ip:
-        # Might be ipv4:port
-        parts = clean_ip.split(":")
-        if len(parts) == 2 and "." in parts[0]:
-            clean_ip = parts[0]
-    elif clean_ip.count("]:") == 1:
-        clean_ip = clean_ip.split("]:")[0]
+    clean_ip = str(ip).strip()
+    # Strip port if bracketed IPv6: [2001:db8::1]:8080 or [fe80::1]
+    m_v6 = re.match(r"^\[([0-9a-fA-F:]+)\](?::\d+)?$", clean_ip)
+    if m_v6:
+        clean_ip = m_v6.group(1)
+    else:
+        # Strip port if IPv4 with port: 198.51.100.1:443
+        m_v4 = re.match(r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::\d+)?$", clean_ip)
+        if m_v4:
+            clean_ip = m_v4.group(1)
+        else:
+            clean_ip = clean_ip.strip("[]")
 
     if ":" in clean_ip:  # IPv6
         parts = clean_ip.split(":")
@@ -232,6 +235,76 @@ def detect_anomalies(record: Dict[str, Any], failing_policies: List[Dict[str, An
             "description": "Sign-in was evaluated against an explicit block policy (e.g. untrusted location, untrusted platform, or non-compliant client).",
         })
 
+    # 11. Multi-Factor Authentication Challenge Required
+    if error_code in (50076, 50074):
+        anomalies.append({
+            "code": "MFA_CHALLENGE_REQUIRED",
+            "title": f"MFA Challenge Required by Tenant Policy (AADSTS{error_code})",
+            "description": (
+                f"Error code AADSTS{error_code} indicates primary authentication succeeded, but an active policy "
+                "or location change requires Multi-Factor Authentication (MFA). Common in background sync agents, "
+                "rich clients, or non-interactive sessions unable to render the interactive MFA prompt."
+            ),
+        })
+
+    # 12. MFA Registration Enrollment Required
+    if error_code in (50079, 50072):
+        anomalies.append({
+            "code": "MFA_REGISTRATION_REQUIRED",
+            "title": f"User Must Enroll in Multi-Factor Authentication (AADSTS{error_code})",
+            "description": (
+                f"Error code AADSTS{error_code} indicates the user account has no registered MFA methods "
+                "(such as Microsoft Authenticator, FIDO2 passkey, or phone). The user must visit https://aka.ms/mfasetup "
+                "from a trusted network to complete security info registration."
+            ),
+        })
+
+    # 13. Identity Protection Risk Detected
+    risk_level = _safe_str(record.get("riskLevelDuringSignIn") or record.get("riskLevelAggregated")).lower()
+    risk_detail = _safe_str(record.get("riskDetail", "none"))
+    risk_state = _safe_str(record.get("riskState", "none")).lower()
+    if risk_level in ("high", "medium") or risk_state in ("atrisk", "confirmedcompromised"):
+        anomalies.append({
+            "code": "IDENTITY_PROTECTION_RISK_DETECTED",
+            "title": f"Identity Protection {risk_level.capitalize()} Risk Flagged",
+            "description": (
+                f"Microsoft Entra ID Protection detected '{risk_level}' risk level on this sign-in "
+                f"(Detail: {risk_detail}, State: {risk_state}). Risk-based Conditional Access policies "
+                "automatically enforce step-up MFA, self-service password reset, or immediate session blocks."
+            ),
+        })
+
+    # 14. Mobile Application Management (MAM) App Protection Policy Required
+    for pol in failing_policies:
+        pol_dict = _safe_dict(pol)
+        grants = [str(g).lower() for g in _safe_list(pol_dict.get("enforcedGrantControls")) if g]
+        if "approvedapplication" in grants or "compliantapplication" in grants:
+            anomalies.append({
+                "code": "MAM_APP_PROTECTION_REQUIRED",
+                "title": f"Approved Client App / App Protection Policy Required by '{pol_dict.get('policyName')}'",
+                "description": (
+                    f"Policy '{pol_dict.get('policyName')}' enforces 'Require approved client app' or 'Require app protection policy' (Intune MAM). "
+                    f"Client application '{client_app or 'Unknown'}' is not an Intune MAM-enlightened app. "
+                    "User must access Microsoft 365 services via managed Outlook, OneDrive, or Edge with Intune app protection active."
+                ),
+            })
+            break
+
+    # 15. Terms of Use Consent Acceptance Required
+    for pol in failing_policies:
+        pol_dict = _safe_dict(pol)
+        grants = [str(g).lower() for g in _safe_list(pol_dict.get("enforcedGrantControls")) if g]
+        if "termsofuse" in grants or error_code == 50158:
+            anomalies.append({
+                "code": "TERMS_OF_USE_NOT_ACCEPTED",
+                "title": f"Terms of Use Consent Required by '{pol_dict.get('policyName')}'",
+                "description": (
+                    f"Policy '{pol_dict.get('policyName')}' requires accepting an organizational Terms of Use agreement. "
+                    "If signing in from a non-interactive client, mobile mail app, or embedded protocol, the web consent modal cannot display."
+                ),
+            })
+            break
+
     return anomalies
 
 
@@ -298,6 +371,9 @@ def parse_records(raw_data: Any, include_success: bool, sanitize: bool) -> List[
             "clientAppUsed": rec.get("clientAppUsed"),
             "ipAddress": mask_ip(rec.get("ipAddress", "")) if sanitize else rec.get("ipAddress"),
             "location": f"{location.get('city', 'Unknown')}, {location.get('countryOrRegion', 'Unknown')}",
+            "riskLevelDuringSignIn": rec.get("riskLevelDuringSignIn"),
+            "riskDetail": rec.get("riskDetail"),
+            "riskState": rec.get("riskState"),
             "errorCode": error_code,
             "failureReason": status.get("failureReason") or "None (Success)",
             "additionalDetails": status.get("additionalDetails"),
@@ -345,6 +421,8 @@ def format_markdown(parsed: List[Dict[str, Any]]) -> str:
             f"TrustType=`{dev.get('trustType')}`, Compliant=`{dev.get('isCompliant')}`, Managed=`{dev.get('isManaged')}`, "
             f"DeviceId Present=`{bool(dev.get('deviceId'))}`"
         )
+        if item.get("riskLevelDuringSignIn") and str(item.get("riskLevelDuringSignIn")).lower() != "none":
+            lines.append(f"- **Identity Protection Risk:** Level=`{item.get('riskLevelDuringSignIn')}`, Detail=`{item.get('riskDetail')}`, State=`{item.get('riskState')}`")
 
         failing_policies = _safe_list(item.get("failingConditionalAccessPolicies"))
         if failing_policies:

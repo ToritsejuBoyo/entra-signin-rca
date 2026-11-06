@@ -53,7 +53,7 @@ class TestSuite:
 def run_tests():
     suite = TestSuite()
     print("==================================================================")
-    print("  entra-signin-rca Comprehensive 30-Scenario Stress Test Suite")
+    print("  entra-signin-rca Comprehensive 38-Scenario Stress Test Suite")
     print("==================================================================")
 
     # Test 01: Empty Input
@@ -357,8 +357,89 @@ def run_tests():
     except Exception as exc:
         suite.record(30, "High-volume benchmark", False, str(exc))
 
+    # Test 31: Bracketed IPv6 with Port Sanitization
+    try:
+        masked = mask_ip("[2600:1f18:416:9900::1]:8443")
+        valid = masked.startswith("2600:1f18:416:") and "[2600" not in masked and "8443" not in masked and "xxxx" in masked
+        suite.record(31, "Bracketed IPv6 address with port cleanly stripped and masked", valid)
+    except Exception as exc:
+        suite.record(31, "Bracketed IPv6 with port", False, str(exc))
+
+    # Test 32: MFA Challenge Required (AADSTS50076)
+    try:
+        record = {"status": {"errorCode": 50076}}
+        anomalies = detect_anomalies(record, [])
+        found = any(a["code"] == "MFA_CHALLENGE_REQUIRED" for a in anomalies)
+        suite.record(32, "Error AADSTS50076 flags MFA_CHALLENGE_REQUIRED", found)
+    except Exception as exc:
+        suite.record(32, "MFA challenge 50076", False, str(exc))
+
+    # Test 33: MFA Registration Required (AADSTS50079)
+    try:
+        record = {"status": {"errorCode": 50079}}
+        anomalies = detect_anomalies(record, [])
+        found = any(a["code"] == "MFA_REGISTRATION_REQUIRED" for a in anomalies)
+        suite.record(33, "Error AADSTS50079 flags MFA_REGISTRATION_REQUIRED (aka.ms/mfasetup)", found)
+    except Exception as exc:
+        suite.record(33, "MFA registration 50079", False, str(exc))
+
+    # Test 34: Identity Protection High Risk Detections
+    try:
+        record = {
+            "status": {"errorCode": 53003},
+            "riskLevelDuringSignIn": "high",
+            "riskDetail": "anomalousToken",
+            "riskState": "atRisk"
+        }
+        anomalies = detect_anomalies(record, [])
+        found = any(a["code"] == "IDENTITY_PROTECTION_RISK_DETECTED" and "High" in a["title"] for a in anomalies)
+        suite.record(34, "Identity Protection high risk level during sign-in isolated", found)
+    except Exception as exc:
+        suite.record(34, "Identity Protection risk", False, str(exc))
+
+    # Test 35: Intune MAM App Protection Policy Requirement
+    try:
+        record = {"clientAppUsed": "NativeMail", "deviceDetail": {"browser": ""}, "status": {"errorCode": 53003}}
+        failing_policies = [{"policyName": "MAM - Require Approved Client", "enforcedGrantControls": ["approvedApplication"]}]
+        anomalies = detect_anomalies(record, failing_policies)
+        found = any(a["code"] == "MAM_APP_PROTECTION_REQUIRED" for a in anomalies)
+        suite.record(35, "Require approved application MAM grant control flags MAM_APP_PROTECTION_REQUIRED", found)
+    except Exception as exc:
+        suite.record(35, "MAM app protection", False, str(exc))
+
+    # Test 36: Terms of Use (ToU) Grant Control Requirement
+    try:
+        record = {"status": {"errorCode": 50158}}
+        failing_policies = [{"policyName": "Corporate Terms of Use", "enforcedGrantControls": ["termsOfUse"]}]
+        anomalies = detect_anomalies(record, failing_policies)
+        found = any(a["code"] == "TERMS_OF_USE_NOT_ACCEPTED" for a in anomalies)
+        suite.record(36, "Terms of Use grant control requirement flags TERMS_OF_USE_NOT_ACCEPTED", found)
+    except Exception as exc:
+        suite.record(36, "Terms of Use requirement", False, str(exc))
+
+    # Test 37: Report-Only Mode Policy Logging
+    try:
+        records = [{
+            "status": {"errorCode": 0},
+            "conditionalAccessStatus": "success",
+            "appliedConditionalAccessPolicies": [{"displayName": "Audit Test", "result": "reportOnlyFailure", "enforcedGrantControls": ["mfa"]}]
+        }]
+        parsed = parse_records(records, include_success=True, sanitize=False)
+        has_failing = len(parsed[0]["failingConditionalAccessPolicies"]) == 1
+        suite.record(37, "Report-only mode policy failure tracked in audit observations", has_failing)
+    except Exception as exc:
+        suite.record(37, "Report-only mode policy", False, str(exc))
+
+    # Test 38: Malformed IPv6 Address Fuzzing
+    try:
+        masked = mask_ip(":::1234:invalid:ipv6:::")
+        valid = bool(masked) and "xxxx" in masked
+        suite.record(38, "Malformed IPv6 syntax handled defensively without unhandled exception", valid)
+    except Exception as exc:
+        suite.record(38, "Malformed IPv6 syntax", False, str(exc))
+
     print("==================================================================")
-    print(f"  STRESS TEST SUMMARY: {suite.passed} PASSED, {suite.failed} FAILED out of 30 tests")
+    print(f"  STRESS TEST SUMMARY: {suite.passed} PASSED, {suite.failed} FAILED out of {len(suite.results)} tests")
     print("==================================================================")
 
     if suite.failed > 0:
@@ -367,3 +448,4 @@ def run_tests():
 
 if __name__ == "__main__":
     run_tests()
+
