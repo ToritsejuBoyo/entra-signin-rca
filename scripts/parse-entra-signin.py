@@ -10,6 +10,8 @@ Usage:
     Get-MgAuditLogSignIn -Top 1 | ConvertTo-Json | python parse-entra-signin.py -i -
 """
 
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json
@@ -19,31 +21,74 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
-def mask_guid(val: str) -> str:
-    if not val or not isinstance(val, str):
-        return val
-    digest = hashlib.sha256(val.encode("utf-8")).hexdigest()[:8]
+def _safe_dict(val: Any) -> Dict[str, Any]:
+    return val if isinstance(val, dict) else {}
+
+
+def _safe_list(val: Any) -> List[Any]:
+    return val if isinstance(val, list) else []
+
+
+def _safe_str(val: Any, default: str = "") -> str:
+    if val is None:
+        return default
+    return str(val).strip()
+
+
+def _safe_int(val: Any, default: int = 0) -> int:
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def mask_guid(val: Any) -> str:
+    if not val:
+        return ""
+    val_str = str(val).strip()
+    if not val_str:
+        return ""
+    digest = hashlib.sha256(val_str.encode("utf-8")).hexdigest()[:8]
     return f"00000000-0000-0000-0000-redacted{digest[:4]}"
 
 
-def mask_ip(ip: str) -> str:
-    if not ip or not isinstance(ip, str):
-        return ip
-    clean_ip = ip.strip("[]")
+def mask_ip(ip: Any) -> str:
+    if not ip:
+        return ""
+    clean_ip = str(ip).strip().strip("[]")
+    # Strip port if present e.g. 1.2.3.4:443 or [2001:db8::1]:8080
+    if ":" in clean_ip and not clean_ip.startswith("2001:") and not "::" in clean_ip:
+        # Might be ipv4:port
+        parts = clean_ip.split(":")
+        if len(parts) == 2 and "." in parts[0]:
+            clean_ip = parts[0]
+    elif clean_ip.count("]:") == 1:
+        clean_ip = clean_ip.split("]:")[0]
+
     if ":" in clean_ip:  # IPv6
         parts = clean_ip.split(":")
         prefix = ":".join(parts[:3]) if len(parts) >= 3 else parts[0]
         return f"{prefix}:xxxx:xxxx:xxxx:xxxx:xxxx (IPv6)"
+
     parts = clean_ip.split(".")
     if len(parts) == 4:
-        return f"{parts[0]}.{parts[1]}.xxx.xxx"
-    return "xxx.xxx.xxx.xxx"
+        try:
+            last = int(parts[3]) % 254 + 1
+        except ValueError:
+            last = 10
+        return f"192.0.2.{last}"
+    return "192.0.2.1"
 
 
-def mask_upn(upn: str) -> str:
-    if not upn or not isinstance(upn, str) or "@" not in upn:
-        return "user-redacted"
-    digest = hashlib.sha256(upn.encode("utf-8")).hexdigest()[:6]
+def mask_upn(upn: Any) -> str:
+    if not upn:
+        return "user-redacted@corp.example.com"
+    val = str(upn).strip()
+    if "@" in val:
+        digest = hashlib.sha256(val.encode("utf-8")).hexdigest()[:6]
+        return f"user-{digest}@corp.example.com"
+    # Phone or guest ID
+    digest = hashlib.sha256(val.encode("utf-8")).hexdigest()[:6]
     return f"user-{digest}@corp.example.com"
 
 
@@ -53,28 +98,29 @@ def detect_anomalies(record: Dict[str, Any], failing_policies: List[Dict[str, An
     Returns a list of structured anomaly dicts with 'code', 'title', and 'description'.
     """
     anomalies: List[Dict[str, str]] = []
-    device = record.get("deviceDetail") or {}
-    raw_ip = record.get("ipAddress") or ""
+    device = _safe_dict(record.get("deviceDetail"))
+    raw_ip = _safe_str(record.get("ipAddress"))
     display_ip = mask_ip(raw_ip) if sanitize else raw_ip
-    client_app = record.get("clientAppUsed") or ""
-    browser = device.get("browser") or ""
-    device_id = device.get("deviceId") or ""
+    client_app = _safe_str(record.get("clientAppUsed"))
+    browser = _safe_str(device.get("browser"))
+    device_id = _safe_str(device.get("deviceId"))
     display_device_id = mask_guid(device_id) if sanitize else device_id
-    display_device_name = "DEVICE-REDACTED" if sanitize else (device.get("displayName") or "Unknown")
+    display_device_name = "DEVICE-REDACTED" if sanitize else (_safe_str(device.get("displayName")) or "Unknown")
     is_compliant = device.get("isCompliant")
-    trust_type = device.get("trustType") or ""
-    status = record.get("status") or {}
-    error_code = status.get("errorCode", 0)
+    trust_type = _safe_str(device.get("trustType"))
+    status = _safe_dict(record.get("status"))
+    error_code = _safe_int(status.get("errorCode", 0))
 
     # 1. Missing Device ID / PRT Passthrough in Desktop Browser
     for pol in failing_policies:
-        grants = [g.lower() for g in (pol.get("enforcedGrantControls") or [])]
+        pol_dict = _safe_dict(pol)
+        grants = [str(g).lower() for g in _safe_list(pol_dict.get("enforcedGrantControls")) if g]
         if ("compliantdevice" in grants or "domainjoineddevice" in grants) and not device_id:
             anomalies.append({
                 "code": "MISSING_PRT_OR_SSO_EXTENSION",
                 "title": "Device ID Empty Under Compliant/DomainJoined Grant Requirement",
                 "description": (
-                    f"Device ID is empty while using browser '{browser}'. Entra cannot verify device compliance "
+                    f"Device ID is empty while using browser '{browser or 'Unknown'}'. Entra cannot verify device compliance "
                     "or domain join without Primary Refresh Token (PRT) passthrough. Common causes: Google Chrome or "
                     "Mozilla Firefox missing Windows Accounts/Single Sign-On extension, Incognito/InPrivate mode "
                     "(which intentionally strips PRT), or macOS without Microsoft Enterprise SSO plug-in."
@@ -125,13 +171,14 @@ def detect_anomalies(record: Dict[str, Any], failing_policies: List[Dict[str, An
 
     # 5. Hybrid Entra Join Requirement Mismatch
     for pol in failing_policies:
-        grants = [g.lower() for g in (pol.get("enforcedGrantControls") or [])]
+        pol_dict = _safe_dict(pol)
+        grants = [str(g).lower() for g in _safe_list(pol_dict.get("enforcedGrantControls")) if g]
         if "domainjoineddevice" in grants and trust_type.lower() != "serverad":
             anomalies.append({
                 "code": "HYBRID_JOIN_MISMATCH",
                 "title": f"Device Trust Type ({trust_type or 'None'}) Does Not Match Required Hybrid Join",
                 "description": (
-                    f"Policy '{pol.get('policyName')}' enforces 'DomainJoinedDevice' (Hybrid Entra Join / ServerAd), "
+                    f"Policy '{pol_dict.get('policyName')}' enforces 'DomainJoinedDevice' (Hybrid Entra Join / ServerAd), "
                     f"but device trust type is '{trust_type or 'Unregistered'}'. Workplace-joined or cloud-only Entra "
                     "joined devices will fail this grant control."
                 ),
@@ -161,6 +208,30 @@ def detect_anomalies(record: Dict[str, Any], failing_policies: List[Dict[str, An
             ),
         })
 
+    # 8. Password Spray / Invalid Credentials
+    if error_code == 50126:
+        anomalies.append({
+            "code": "INVALID_CREDENTIALS_OR_SPRAY",
+            "title": "Invalid Username or Password (AADSTS50126)",
+            "description": "Sign-in failed due to invalid credentials. Frequent occurrences indicate user typo or automated brute-force / password spray attack.",
+        })
+
+    # 9. Account Lockout
+    if error_code == 50053:
+        anomalies.append({
+            "code": "ACCOUNT_LOCKED_OUT",
+            "title": "Account Locked Out (AADSTS50053)",
+            "description": "Account is locked because user tried to sign in too many times with an incorrect user ID or password. Smart Lockout triggered.",
+        })
+
+    # 10. Explicit Conditional Access Block
+    if error_code == 53003 and not any(a["code"] in ("LEGACY_AUTHENTICATION_PROTOCOL", "IPV6_NAMED_LOCATION_MISMATCH") for a in anomalies):
+        anomalies.append({
+            "code": "CONDITIONAL_ACCESS_BLOCK_POLICY",
+            "title": "Access Blocked by Conditional Access Policy (AADSTS53003)",
+            "description": "Sign-in was evaluated against an explicit block policy (e.g. untrusted location, untrusted platform, or non-compliant client).",
+        })
+
     return anomalies
 
 
@@ -181,28 +252,28 @@ def parse_records(raw_data: Any, include_success: bool, sanitize: bool) -> List[
         if not isinstance(rec, dict):
             continue
 
-        status = rec.get("status") or {}
-        error_code = status.get("errorCode", 0)
-        ca_status = (rec.get("conditionalAccessStatus") or "").lower()
+        status = _safe_dict(rec.get("status"))
+        error_code = _safe_int(status.get("errorCode", 0))
+        ca_status = _safe_str(rec.get("conditionalAccessStatus")).lower()
 
         # By default filter to failures/interruptions
         if not include_success and error_code == 0 and ca_status not in ("failure", "notapplied"):
             continue
 
-        ca_policies = rec.get("appliedConditionalAccessPolicies") or []
+        ca_policies = _safe_list(rec.get("appliedConditionalAccessPolicies"))
         failing_ca = []
         satisfied_ca = []
 
         for pol in ca_policies:
             if not isinstance(pol, dict):
                 continue
-            res = (pol.get("result") or "").lower()
+            res = _safe_str(pol.get("result")).lower()
             entry = {
-                "policyName": pol.get("displayName", "Unnamed Policy"),
-                "policyId": mask_guid(pol.get("id", "")) if sanitize else pol.get("id", ""),
-                "result": pol.get("result", "unknown"),
-                "enforcedGrantControls": pol.get("enforcedGrantControls") or [],
-                "enforcedSessionControls": pol.get("enforcedSessionControls") or [],
+                "policyName": _safe_str(pol.get("displayName", "Unnamed Policy")),
+                "policyId": mask_guid(pol.get("id", "")) if sanitize else _safe_str(pol.get("id")),
+                "result": _safe_str(pol.get("result", "unknown")),
+                "enforcedGrantControls": [str(g) for g in _safe_list(pol.get("enforcedGrantControls")) if g],
+                "enforcedSessionControls": [str(s) for s in _safe_list(pol.get("enforcedSessionControls")) if s],
                 "conditionsSatisfied": pol.get("conditionsSatisfied"),
                 "conditionsNotSatisfied": pol.get("conditionsNotSatisfied"),
             }
@@ -211,8 +282,8 @@ def parse_records(raw_data: Any, include_success: bool, sanitize: bool) -> List[
             elif res in ("success", "reportonlyinterrupted"):
                 satisfied_ca.append(entry)
 
-        device = rec.get("deviceDetail") or {}
-        location = rec.get("location") or {}
+        device = _safe_dict(rec.get("deviceDetail"))
+        location = _safe_dict(rec.get("location"))
         anomalies = detect_anomalies(rec, failing_ca, sanitize=sanitize)
 
         summary = {
@@ -233,8 +304,8 @@ def parse_records(raw_data: Any, include_success: bool, sanitize: bool) -> List[
             "conditionalAccessStatus": rec.get("conditionalAccessStatus"),
             "authenticationRequirement": rec.get("authenticationRequirement"),
             "deviceDetail": {
-                "deviceId": mask_guid(device.get("deviceId", "")) if (sanitize and device.get("deviceId")) else device.get("deviceId", ""),
-                "displayName": "DEVICE-REDACTED" if (sanitize and device.get("displayName")) else device.get("displayName", ""),
+                "deviceId": mask_guid(device.get("deviceId", "")) if (sanitize and device.get("deviceId")) else _safe_str(device.get("deviceId")),
+                "displayName": "DEVICE-REDACTED" if (sanitize and device.get("displayName")) else _safe_str(device.get("displayName")),
                 "operatingSystem": device.get("operatingSystem"),
                 "browser": device.get("browser"),
                 "isCompliant": device.get("isCompliant"),
@@ -260,34 +331,38 @@ def format_markdown(parsed: List[Dict[str, Any]]) -> str:
     ]
 
     for idx, item in enumerate(parsed, 1):
-        dev = item["deviceDetail"]
-        lines.append(f"## Event #{idx}: `{item['userPrincipalName']}` -> `{item['appDisplayName']}`")
-        lines.append(f"- **Timestamp (UTC):** `{item['createdDateTime']}` | **Interactive:** `{item['isInteractive']}`")
-        lines.append(f"- **Correlation ID:** `{item['correlationId']}`")
-        lines.append(f"- **Error Code:** `AADSTS{item['errorCode']}` (`{item['errorCode']}`) - {item['failureReason']}")
+        dev = _safe_dict(item.get("deviceDetail"))
+        lines.append(f"## Event #{idx}: `{item.get('userPrincipalName')}` -> `{item.get('appDisplayName')}`")
+        lines.append(f"- **Timestamp (UTC):** `{item.get('createdDateTime')}` | **Interactive:** `{item.get('isInteractive')}`")
+        lines.append(f"- **Correlation ID:** `{item.get('correlationId')}`")
+        lines.append(f"- **Error Code:** `AADSTS{item.get('errorCode')}` (`{item.get('errorCode')}`) - {item.get('failureReason')}")
         if item.get("additionalDetails"):
-            lines.append(f"- **Additional Details:** {item['additionalDetails']}")
-        lines.append(f"- **CA Status:** `{item['conditionalAccessStatus']}` | **Auth Requirement:** `{item['authenticationRequirement']}`")
-        lines.append(f"- **Network & Client:** IP `{item['ipAddress']}` ({item['location']}) | Client: `{item['clientAppUsed']}`")
+            lines.append(f"- **Additional Details:** {item.get('additionalDetails')}")
+        lines.append(f"- **CA Status:** `{item.get('conditionalAccessStatus')}` | **Auth Requirement:** `{item.get('authenticationRequirement')}`")
+        lines.append(f"- **Network & Client:** IP `{item.get('ipAddress')}` ({item.get('location')}) | Client: `{item.get('clientAppUsed')}`")
         lines.append(
-            f"- **Device Context:** OS=`{dev['operatingSystem']}`, Browser=`{dev['browser']}`, "
-            f"TrustType=`{dev['trustType']}`, Compliant=`{dev['isCompliant']}`, Managed=`{dev['isManaged']}`, "
-            f"DeviceId Present=`{bool(dev['deviceId'])}`"
+            f"- **Device Context:** OS=`{dev.get('operatingSystem')}`, Browser=`{dev.get('browser')}`, "
+            f"TrustType=`{dev.get('trustType')}`, Compliant=`{dev.get('isCompliant')}`, Managed=`{dev.get('isManaged')}`, "
+            f"DeviceId Present=`{bool(dev.get('deviceId'))}`"
         )
 
-        if item["failingConditionalAccessPolicies"]:
+        failing_policies = _safe_list(item.get("failingConditionalAccessPolicies"))
+        if failing_policies:
             lines.append("\n### Failing / Blocking Conditional Access Policies")
             lines.append("| Policy Name | Result | Enforced Grant Controls | Enforced Session Controls |")
             lines.append("| --- | --- | --- | --- |")
-            for pol in item["failingConditionalAccessPolicies"]:
-                grants = ", ".join(pol["enforcedGrantControls"]) or "None"
-                sessions = ", ".join(pol["enforcedSessionControls"]) or "None"
-                lines.append(f"| `{pol['policyName']}` | `{pol['result']}` | `{grants}` | `{sessions}` |")
+            for pol in failing_policies:
+                pol_dict = _safe_dict(pol)
+                grants = ", ".join(str(g) for g in _safe_list(pol_dict.get("enforcedGrantControls"))) or "None"
+                sessions = ", ".join(str(s) for s in _safe_list(pol_dict.get("enforcedSessionControls"))) or "None"
+                lines.append(f"| `{pol_dict.get('policyName')}` | `{pol_dict.get('result')}` | `{grants}` | `{sessions}` |")
 
-        if item["diagnosticHints"]:
+        diagnostic_hints = _safe_list(item.get("diagnosticHints"))
+        if diagnostic_hints:
             lines.append("\n### Automated Root-Cause Anomaly Detections")
-            for hint in item["diagnosticHints"]:
-                lines.append(f"- **[{hint['code']}] {hint['title']}:** {hint['description']}")
+            for hint in diagnostic_hints:
+                hint_dict = _safe_dict(hint)
+                lines.append(f"- **[{hint_dict.get('code')}] {hint_dict.get('title')}:** {hint_dict.get('description')}")
 
         lines.append("\n---\n")
 
