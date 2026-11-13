@@ -1,6 +1,17 @@
 ---
 name: entra-signin-rca
-description: Analyze Microsoft Entra ID (Azure AD) Interactive and Non-Interactive Sign-In JSON/CSV logs to pinpoint why a user, service principal, or device failed authentication or was blocked by overlapping Conditional Access (CA) policies. Use when troubleshooting AADSTS error codes, MFA loops, compliant-device lockouts, legacy authentication blocks, or Conditional Access policy conflicts.
+description: >-
+  Analyze Microsoft Entra ID (Azure AD) Interactive and Non-Interactive Sign-In JSON/CSV logs to
+  pinpoint why a user, service principal, or device failed authentication or was blocked by
+  overlapping Conditional Access (CA) policies. Use when troubleshooting AADSTS error codes, MFA
+  loops, compliant-device lockouts, legacy authentication blocks, or Conditional Access policy
+  conflicts.
+license: MIT
+version: 1.0.0
+metadata:
+  standard: agentskills.io
+  dependencies: none (Python standard library only)
+  access: read-only collectors; no state is modified on target systems
 ---
 
 # Entra ID Conditional Access & Sign-In Root Cause Analyzer (`entra-signin-rca`)
@@ -92,3 +103,29 @@ When `--generate-proof-of-work` is requested:
 - **Parser Script:** `scripts/parse-entra-signin.py` (Zero-dependency Python 3 parser for Entra Sign-In JSON exports with `--sanitize` and `--format markdown|json`).
 - **Technical Reference:** `references/entra-error-codes-and-ca-controls.md` (Lookup reference for `AADSTS` error codes, CA grant/session controls, and browser/device trust pitfalls).
 - **Output Template:** `assets/ca-lockout-rca-report-template.md` (Standard IAM RCA & CAB-ready remediation template).
+
+---
+
+## Data Handling & Sanitization
+
+Sanitization runs **client-side, before any output is produced**, so credentials and
+personal data are removed on the operator's machine rather than being sent to a model
+or pasted into a ticket.
+
+Two layers apply:
+
+1. This skill's own domain-aware masking (hostnames, accounts, and the identifiers
+   specific to this domain).
+2. A shared residual pass, [`scripts/sanitizer.py`](scripts/sanitizer.py), vendored
+   identically across every skill in the library. It is the common floor: private keys,
+   cloud provider keys, JWTs and bearer tokens, connection-string passwords, assigned
+   secrets, emails, IPv4/IPv6 addresses, MAC addresses, GUIDs, SSNs, payment card
+   numbers, and phone numbers.
+
+The contract is enforced by `tests/sanitizer_conformance_test.py`, which runs the same
+adversarial corpus in every skill. Documentation placeholders (RFC 5737/3849 addresses,
+RFC 7042 MAC ranges, `example.com` names, and existing `[REDACTED-*]` tokens) are
+preserved, so the pass is safe to apply more than once.
+
+Sanitization is thorough and tested, but it is not a substitute for reading output
+before sharing it outside your organization.

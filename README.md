@@ -1,10 +1,12 @@
 # Entra ID Conditional Access & Sign-In RCA (`entra-signin-rca`)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python: 3.9+](https://img.shields.io/badge/Python-3.9+-brightgreen.svg)](https://www.python.org/)
-[![Standard: agentskills.io](https://img.shields.io/badge/Standard-agentskills.io-purple.svg)](https://agentskills.io)
-[![Tests: Passing](https://img.shields.io/badge/Tests-Passing-success.svg)](tests/validate-skill.py)
 
+[![tests](https://github.com/ToritsejuBoyo/entra-signin-rca/actions/workflows/tests.yml/badge.svg)](https://github.com/ToritsejuBoyo/entra-signin-rca/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)]()
+[![Dependencies](https://img.shields.io/badge/dependencies-zero%20(stdlib%20only)-brightgreen.svg)](CONTRIBUTING.md)
+[![Security](https://img.shields.io/badge/security-read--only%20%7C%20no%20egress-informational.svg)](SECURITY.md)
+[![Standard](https://img.shields.io/badge/standard-agentskills.io-blueviolet.svg)](https://agentskills.io)
 An autonomous AI Agent Skill and zero-dependency diagnostic toolkit for Microsoft 365 and IAM administrators. Evaluates exported Microsoft Entra ID (Azure AD) Sign-In JSON logs and live Microsoft Graph telemetry to determine why a user was blocked, prompted for unexpected MFA, or caught in Conditional Access loops.
 
 ![Entra Sign-In RCA Terminal Demo](assets/demo.gif)
