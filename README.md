@@ -3,7 +3,7 @@
 
 [![tests](https://github.com/ToritsejuBoyo/entra-signin-rca/actions/workflows/tests.yml/badge.svg)](https://github.com/ToritsejuBoyo/entra-signin-rca/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)]()
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)]()
 [![Dependencies](https://img.shields.io/badge/dependencies-zero%20(stdlib%20only)-brightgreen.svg)](CONTRIBUTING.md)
 [![Security](https://img.shields.io/badge/security-read--only%20%7C%20no%20egress-informational.svg)](SECURITY.md)
 [![Standard](https://img.shields.io/badge/standard-agentskills.io-blueviolet.svg)](https://agentskills.io)
@@ -58,7 +58,7 @@ The bundled parser (`scripts/parse-entra-signin.py`) automatically flags the top
 
 ### 1. Prerequisites
 * **Operating System:** Windows, macOS, or Linux
-* **Python Runtime:** Python 3.9 or newer (installed with standard library; verify with `python --version`)
+* **Python Runtime:** Python 3.10 or newer (installed with standard library; verify with `python --version`)
 * **Zero Dependencies:** No third-party packages or virtual environments required (no `pip install` needed)
 * **Optional (for live tenant queries):** PowerShell 5.1+ and the read-only `Microsoft.Graph.Authentication` module
 
